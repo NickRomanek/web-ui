@@ -1,5 +1,9 @@
 import pdb
 import logging
+import subprocess
+import time
+import os
+import signal
 
 from dotenv import load_dotenv
 
@@ -48,6 +52,39 @@ _global_agent_state = AgentState()
 # webui config
 webui_config_manager = utils.ConfigManager()
 
+# Add this function after the imports, around line 40-50
+def ensure_chrome_debugging_open(chrome_path=None, chrome_debug_port=9222):
+    """Launch Chrome with debugging port if not already running"""
+    if chrome_path is None:
+        chrome_path = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+    
+    # Check if Chrome is already running with debugging port
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.connect(('localhost', chrome_debug_port))
+        s.close()
+        print(f"Chrome already running with debugging on port {chrome_debug_port}")
+        return  # Chrome is already running with debugging
+    except:
+        print(f"Chrome not running with debugging, launching...")
+        
+    # Launch Chrome with debugging enabled
+    try:
+        import subprocess
+        subprocess.Popen([
+            chrome_path,
+            f"--remote-debugging-port={chrome_debug_port}",
+            "--no-first-run",
+            "--no-default-browser-check"
+        ], shell=True)
+        
+        # Wait for Chrome to start up
+        import time
+        time.sleep(2)
+        print(f"Chrome launched with debugging port {chrome_debug_port}")
+    except Exception as e:
+        print(f"Error launching Chrome: {e}")
 
 def scan_and_register_components(blocks):
     """扫描一个 Blocks 对象并注册其中的所有交互式组件，但不包括按钮"""
@@ -440,10 +477,16 @@ async def run_custom_agent(
         cdp_url = chrome_cdp
         if use_own_browser:
             cdp_url = os.getenv("CHROME_CDP", chrome_cdp)
+            if not cdp_url:
+                cdp_url = "http://localhost:9222"
 
             chrome_path = os.getenv("CHROME_PATH", None)
             if chrome_path == "":
                 chrome_path = None
+            
+            # Launch Chrome if needed
+            ensure_chrome_debugging_open(chrome_path, 9222)
+            
             chrome_user_data = os.getenv("CHROME_USER_DATA", None)
             if chrome_user_data:
                 extra_chromium_args += [f"--user-data-dir={chrome_user_data}"]
@@ -459,9 +502,14 @@ async def run_custom_agent(
                 config=BrowserConfig(
                     headless=headless,
                     disable_security=disable_security,
-                    cdp_url=cdp_url,
-                    chrome_instance_path=chrome_path,
-                    extra_chromium_args=extra_chromium_args,
+                    cdp_url="http://localhost:9222",  # Use fixed CDP port
+                    chrome_instance_path="C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",  # Hardcode Chrome
+                    extra_chromium_args=[
+                        "--accept_downloads=True", 
+                        f"--window-size={window_w},{window_h}",
+                        "--remote-debugging-port=9222",  # Enable remote debugging
+                        "--user-data-dir=C:\\Users\\nick\\AppData\\Local\\Google\\Chrome\\User Data"  # Chrome profile
+                    ],
                 )
             )
 
